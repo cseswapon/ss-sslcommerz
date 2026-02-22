@@ -43,11 +43,15 @@ import SSLCommerzPayment from 'ss-sslcommerz';
 ### Step 2: Initialize the Payment Client
 
 ```ts
+import SSLCommerzPayment from "ss-sslcommerz";
+
 const sslcz = new SSLCommerzPayment(
-  'your_store_id',
-  'your_store_password',
-  false // false = sandbox, true = live
+  "your_store_id",
+  "your_store_password",
+  false,
 );
+
+export default sslcz;
 ```
 
 ---
@@ -56,6 +60,8 @@ const sslcz = new SSLCommerzPayment(
 
 ```ts
 const session = await sslcz.init({
+  store_passwd:"example",
+  store_id:"example",
   tran_id: 'TRANSACTION_12345',
   total_amount: 1000,
   currency: 'BDT',
