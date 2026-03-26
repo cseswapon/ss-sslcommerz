@@ -1,28 +1,26 @@
-
 ````md
-# ss-sslcommerz
+# ss-sslcommerz Integration for Node.js / Express / NestJS
 
-A TypeScript-compatible, framework-agnostic wrapper for the [SSLCommerz](https://www.sslcommerz.com/) payment gateway. Developed by **Swapon Saha**. This module works with Node.js, NestJS, Express, or any JavaScript/TypeScript environment.
+A TypeScript-compatible, framework-agnostic integration for the [SSLCommerz](https://www.sslcommerz.com/) payment gateway. Developed by **Swapon Saha**. This module supports handling **Founder Donations** with automatic status update and frontend redirection.
 
 ---
 
 ## 🚀 Features
 
 - ✅ TypeScript & JavaScript support
-- ✅ NestJS/Express/Node.js compatible
+- ✅ Node.js / Express / NestJS compatible
 - ✅ Sandbox & Live modes
 - ✅ Full SSLCommerz API coverage:
   - Payment initialization
   - Payment validation
-  - Refund initiation
-  - Refund status query
+  - Refund initiation & query
   - Transaction query (by session or transaction ID)
+- ✅ Automatic handling of **success**, **fail**, **cancel** callbacks
+- ✅ Backend updates payment status in DB and redirects to frontend URL
 
 ---
 
 ## 📦 Installation
-
-Install the package using npm:
 
 ```bash
 npm install ss-sslcommerz
@@ -30,121 +28,130 @@ npm install ss-sslcommerz
 
 ---
 
-## 🚀 Usage Example (NestJS, Express, Node.js Compatible)
+## 🔧 Setup
 
-### Step 1: Import the Package
-
-```ts
-import SSLCommerzPayment from 'ss-sslcommerz';
-```
-
----
-
-### Step 2: Initialize the Payment Client
+### 1. Import and Initialize SSLCommerz
 
 ```ts
-import SSLCommerzPayment from "ss-sslcommerz";
+import * as SSLCommerz from "ss-sslcommerz";
+const SSLCommerzPayment = (SSLCommerz as any).SSLCommerzPayment;
 
-const sslcz = new SSLCommerzPayment(
-  "your_store_id",
-  "your_store_password",
-  false,
+export const sslcz = new SSLCommerzPayment(
+  process.env.SSL_STORE_ID as string,
+  process.env.SSL_STORE_PASSWORD as string,
+  false // set true for live
 );
-
-export default sslcz;
 ```
 
 ---
 
-### Step 3: Create a Payment Session
+### 2. Create a Payment Session
 
 ```ts
+import { sslcz } from './config/ssl.config';
+import { env } from './config/env';
+
 const session = await sslcz.init({
-  store_passwd:"example",
-  store_id:"example",
-  tran_id: 'TRANSACTION_12345',
-  total_amount: 1000,
+  store_passwd: env.SSL.STORE_PASSWORD,
+  store_id: env.SSL.STORE_ID,
+  tran_id: payment.transactionId, // unique transaction id from backend
+  total_amount: payment.amount,
   currency: 'BDT',
-  success_url: 'https://yourdomain.com/success',
-  fail_url: 'https://yourdomain.com/fail',
-  cancel_url: 'https://yourdomain.com/cancel',
-  cus_name: 'Swapon Saha',
-  cus_email: 'swapon@example.com',
-  cus_add1: 'Mirpur, Dhaka',
-  cus_city: 'Dhaka',
-  cus_state: 'Dhaka',
-  cus_postcode: '1216',
-  cus_country: 'Bangladesh',
-  cus_phone: '017xxxxxxxx',
-  shipping_method: 'Courier',
+  success_url: `${env.BACKEND_URL}/payment/success`,
+  fail_url: `${env.BACKEND_URL}/payment/fail`,
+  cancel_url: `${env.BACKEND_URL}/payment/cancel`,
+  cus_name: founder.name,
+  cus_email: founder.email,
+  cus_add1: "N/A",
+  cus_city: "N/A",
+  cus_state: "N/A",
+  cus_postcode: "0000",
+  cus_country: "Bangladesh",
+  cus_phone: founder.phone,
+  shipping_method: "N/A",
   num_of_item: 1,
-  product_name: 'Flight Ticket',
-  product_category: 'Travel',
-  product_profile: 'general'
+  product_name: "Founder Donation",
+  product_category: "Found",
+  product_profile: "general",
+  ship_name: "N/A",
+  ship_add1: "N/A",
+  ship_city: "N/A",
+  ship_state: "N/A",
+  ship_postcode: "N/A",
+  ship_country: "N/A"
 });
 
-console.log(session);
+console.log(session); // session.gw_url will be used to redirect user to payment page
 ```
 
 ---
 
-## ✅ Other API Methods
+### 3. Backend Routes for Callbacks
 
-### 🔹 Validate Payment
-
-```ts
-const validation = await sslcz.validate({ val_id: 'SSL_VALIDATION_ID' });
-```
-
-### 🔹 Refund Request
+#### Success Route
 
 ```ts
-const refund = await sslcz.initiateRefund({
-  refund_amount: '500',
-  refund_remarks: 'Customer canceled',
-  bank_tran_id: 'BANK123',
-  refe_id: 'REF123'
+app.post('/payment/success', async (req, res) => {
+  const transactionId = req.body?.tran_id;
+  await founderService.updatePaymentStatus(transactionId, PaymentStatus.SUCCESS);
+
+  // Redirect to frontend success page
+  res.redirect(`${env.FRONTEND_URL}/payment/success?transactionId=${transactionId}`);
 });
 ```
 
-### 🔹 Refund Query
+#### Fail Route
 
 ```ts
-const result = await sslcz.refundQuery({ refund_ref_id: 'REFUND_456' });
+app.post('/payment/fail', async (req, res) => {
+  const transactionId = req.body?.tran_id;
+  await founderService.updatePaymentStatus(transactionId, PaymentStatus.FAIL);
+
+  res.redirect(`${env.FRONTEND_URL}/payment/fail?transactionId=${transactionId}`);
+});
 ```
 
-### 🔹 Query Transaction by Session ID or Transaction ID
+#### Cancel Route
 
 ```ts
-await sslcz.transactionQueryBySessionId({ sessionkey: 'session_xyz' });
-await sslcz.transactionQueryByTransactionId({ tran_id: 'tran_abc' });
+app.post('/payment/cancel', async (req, res) => {
+  const transactionId = req.body?.tran_id;
+  await founderService.updatePaymentStatus(transactionId, PaymentStatus.CANCEL);
+
+  res.redirect(`${env.FRONTEND_URL}/payment/cancel?transactionId=${transactionId}`);
+});
+```
+
+> All routes **receive POST requests** from SSLCommerz after payment completion and then redirect to the frontend with the transactionId in query params.
+
+---
+
+### 4. Optional: Clean Up Pending Payments
+
+```ts
+await founderService.cleanUpPaymentPending(); 
+// Deletes all payments with PENDING status older than 25 minutes
 ```
 
 ---
 
-## 🧠 Tips
+### 5. Tips
 
-* Always use the correct `store_id` and `store_password`.
-* Set `live = true` in constructor for production.
-* Handle API responses properly and validate fields from SSLCommerz response.
+* Always use correct `store_id` and `store_password`.
+* Use `live = true` in constructor for production.
+* Validate SSLCommerz responses before updating DB.
+* Keep `transactionId` unique for each payment.
+* Use `catchAsync` in Express to handle async errors in routes.
 
 ---
 
-## 👨‍💻 Maintained By
+### Maintained By
 
 **Swapon Saha**
 🔗 GitHub: [cseswapon](https://github.com/cseswapon)
 
 ---
 
-## 📄 License
+### License
 
-Licensed under the [ISC License](LICENSE).
-
----
-
-## 🤝 Contribute
-
-Pull requests and stars are welcome! 🙌
-If you found this useful, feel free to ⭐ the repo.
-
+Licensed under [ISC License](LICENSE)
